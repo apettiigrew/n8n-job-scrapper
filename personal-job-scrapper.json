@@ -1,0 +1,847 @@
+{
+  "name": "personal-job-scrapper",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -448,
+        -528
+      ],
+      "id": "bb5a3f1f-019f-4cff-ba6c-e3e5e9a0b184",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cc27b2d9-8de7-43ca-a741-2d150084f78e",
+              "name": "currentStartIndex",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "fc552c57-4510-4f04-aa09-2294306d0d9f",
+              "name": "maxPages",
+              "value": 10,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -224,
+        -144
+      ],
+      "id": "ca1b75bc-8254-4742-842f-da6909d7e4c4",
+      "name": "Set Fields"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/customsearch/v1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AIzaSyBmBKQzQVhHFlHF1wo35x_75rdHo5ap27Y"
+            },
+            {
+              "name": "cx",
+              "value": "75734e75b9ab54cf7"
+            },
+            {
+              "name": "q",
+              "value": "site:weworkremotely.com/remote-jobs (\"Full Stack Engineer\" OR \"Full Stack Developer\" OR \"Software Engineer\" OR \"Software Developer\" OR \"Backend Engineer\" OR \"Backend Developer\")\"remote\" -hybrid -NYC -LA -San"
+            },
+            {
+              "name": "start",
+              "value": "={{ $runIndex == 0 ? $node[\"Set Fields\"].json.currentStartIndex : $node[\"Pagination Check\"].json.startIndex }}"
+            },
+            {
+              "name": "dateRestrict",
+              "value": "d1"
+            },
+            {
+              "name": "sort",
+              "value": "date:d:s"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        -144
+      ],
+      "id": "c8f9fc17-dca6-4195-9263-8dd578e4045a",
+      "name": "Search Google"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the response data\nconst response = $input.first().json;\nconst items = response.items || [];\n\n// Track pagination info\nlet nextStartIndex = 1;\nif (response.queries && response.queries.nextPage && response.queries.nextPage[0]) {\n  nextStartIndex = response.queries.nextPage[0].startIndex;\n}\n\n// Calculate if we should continue (Google only allows up to 100 results)\nconst hasMoreResults = nextStartIndex <= 100;\n\n// Process the items and include pagination info in each item\nconst results = items.map(item => {\n  const titleParts = item.title.split(\" - \");\n  return {\n    name: titleParts[0] || null,\n    title: titleParts.slice(1).join(\" - \") || null,\n    link: item.link || null,\n    snippet: item.snippet || null,\n    image: item.pagemap?.cse_thumbnail?.[0]?.src || null,\n    // Add pagination info to each item\n    startIndex: nextStartIndex,\n    hasMoreResults: hasMoreResults\n  };\n});\n\n// If there are no results, return at least one item with pagination info\nif (results.length === 0) {\n  return [{ \n    json: {\n      name: null,\n      title: null,\n      link: null,\n      snippet: null,\n      image: null,\n      startIndex: nextStartIndex,\n      hasMoreResults: false\n    }\n  }];\n}\n\n// Return the processed results\nreturn results.map(r => ({ json: r }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        -224
+      ],
+      "id": "d8840b9b-1561-4097-bcff-0b6e940b6776",
+      "name": "Extract Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all input items\nconst inputItems = $input.all();\nconsole.log(\"Input items count:\", inputItems.length);\n\n// Extract pagination values with fallbacks\nlet nextStartIndex = 1;\nlet hasMoreResults = false;\n\n// Try different approaches to find the pagination info\nif (inputItems && inputItems.length > 0) {\n  const firstItem = inputItems[0];\n  \n  // Check direct properties\n  if (firstItem.json) {\n    console.log(\"First item JSON:\", JSON.stringify(firstItem.json));\n    \n    // Check for \"index\" property (instead of startIndex)\n    if (firstItem.json.index !== undefined) {\n      nextStartIndex = firstItem.json.index;\n      console.log(\"Found index:\", nextStartIndex);\n    }\n    \n    // Check for \"results\" property (instead of hasMoreResults)\n    if (firstItem.json.results !== undefined) {\n      hasMoreResults = firstItem.json.results;\n      console.log(\"Found results:\", hasMoreResults);\n    }\n  }\n}\n\n// Return pagination control info\nreturn {\n  json: {\n    continueLoop: hasMoreResults,\n    startIndex: nextStartIndex\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        -224
+      ],
+      "id": "2f5ed2de-fdf2-4d05-9f83-1fd15896e76b",
+      "name": "Pagination"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "faef2862-80a4-465b-9e0b-be5b9753dcbd",
+              "leftValue": "={{ $json.continueLoop }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1472,
+        -144
+      ],
+      "id": "a69ccd7a-c993-4c4e-8c2a-b18ae4a6159a",
+      "name": "Pagination Check"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        -224
+      ],
+      "id": "a5b8762f-c729-435b-8eee-4e478be79b87",
+      "name": "Wait",
+      "webhookId": "d3bbbd53-2135-45e5-a847-aad35b1c518e"
+    },
+    {
+      "parameters": {
+        "content": "## Google API Instructions\n\n1. Go to [Google Cloud Console](https://console.cloud.google.com/)\n   - Create a new project  \n   - Enable **Custom Search API**  \n   - Go to **Credentials** and copy your **API Key**\n\n2. Go to [Programmable Search Engine](https://programmablesearchengine.google.com/controlpanel/create)\n   - Create a name  \n   - Select **Search entire web**  \n   - Copy the **cx** value\n\n## Usage Limits (Free Tier)\n\n- The free tier of the Google Custom Search API allows **100 requests per day**\n- Each request returns **up to 10 search results**\n- This means you can get **up to 1,000 search results per day** at no cost\n",
+        "height": 500,
+        "width": 360,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -912,
+        -656
+      ],
+      "id": "6a20fd29-6579-4dc1-87d1-bc37d9639c12",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        0,
+        -528
+      ],
+      "id": "98884265-1283-4d55-a0d7-a42f9cf8d695",
+      "name": "loop-over-jobs"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6853ffbb-a596-4f3d-8dac-a5495a7c7e1a",
+              "leftValue": "={{ $json.searchInformation.totalResults.toNumber() }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        288,
+        -224
+      ],
+      "id": "b187c4b6-c840-4cb6-9a28-088784bd8bf2",
+      "name": "contains data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nconsole.log($(\"linkedin-posts\").all())\nconsole.log($(\"loop-over-jobs\").all())\n\nconst jobs = $(\"linkedin-posts\").all();\nconst filterData = $(\"loop-over-jobs\").all();\n\nfor (let i = 0;i<jobs.length;i++) {\n  if(jobs[i] && filterData[i]){\n    jobs[i].json.status = filterData[i].json.message.content.status;  \n  }\n}\n\nreturn jobs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        -720
+      ],
+      "id": "d78c1620-7919-4de2-8122-9e77ab588cdc",
+      "name": "attach-status-attribute"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "29f78281-7aad-8089-b5cb-cd072fc4d529",
+          "mode": "list",
+          "cachedResultName": "Valid Farms",
+          "cachedResultUrl": "https://www.notion.so/29f782817aad8089b5cbcd072fc4d529"
+        },
+        "title": "={{ $json.activity_id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "website|select",
+              "selectValue": "linkedin"
+            },
+            {
+              "key": "post_date|date",
+              "date": "={{ $now.format('yyyy-MM-dd') }}"
+            },
+            {
+              "key": "post_url|url",
+              "urlValue": "={{ $json.post_url }}"
+            },
+            {
+              "key": "applied|select",
+              "selectValue": "not-applied"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        -816
+      ],
+      "id": "a62b2cd5-17e2-49fe-b14d-f1b28a49a2ac",
+      "name": "save-valid-jobs",
+      "credentials": {
+        "notionApi": {
+          "id": "YoZcBB57YTj8xBlI",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "29f78281-7aad-80c0-ae71-d11a47aad0d9",
+          "mode": "list",
+          "cachedResultName": "Invalid Farms",
+          "cachedResultUrl": "https://www.notion.so/29f782817aad80c0ae71d11a47aad0d9"
+        },
+        "title": "={{ $json.activity_id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "website|select",
+              "selectValue": "linkedin"
+            },
+            {
+              "key": "post_url|url",
+              "urlValue": "={{ $json.post_url }}"
+            },
+            {
+              "key": "post_date|date",
+              "date": "={{ $now.format('yyyy-MM-dd') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        -576
+      ],
+      "id": "469e2bcb-9a66-4c77-8c33-1eeb5b1c40e0",
+      "name": "save-invalid-jobs",
+      "credentials": {
+        "notionApi": {
+          "id": "YoZcBB57YTj8xBlI",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71cad50b-5a48-4359-acc0-b05d49b71505",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "VALID",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        576,
+        -720
+      ],
+      "id": "169dd601-14d6-4d4e-8f41-258cec99d341",
+      "name": "check-status"
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        576,
+        -464
+      ],
+      "id": "7b687666-0a15-4059-8923-e2b8c53fc375",
+      "name": "wait",
+      "webhookId": "9e22ace5-8aa2-401b-88d4-6e1a0026ace8"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "29f78281-7aad-8089-b5cb-cd072fc4d529",
+          "mode": "list",
+          "cachedResultName": "Valid Farms",
+          "cachedResultUrl": "https://www.notion.so/29f782817aad8089b5cbcd072fc4d529"
+        },
+        "title": "={{ $json.name }}",
+        "simple": false,
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "post_url|url",
+              "urlValue": "={{ $json.link }}"
+            },
+            {
+              "key": "post_date|date",
+              "date": "={{ $now }}"
+            },
+            {
+              "key": "website|select",
+              "selectValue": "weworkremotely"
+            },
+            {
+              "key": "applied|select",
+              "selectValue": "not-applied"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1024,
+        -224
+      ],
+      "id": "a6b9b498-776a-451a-aabd-512f69289e51",
+      "name": "Create Database row",
+      "credentials": {
+        "notionApi": {
+          "id": "YoZcBB57YTj8xBlI",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert text filter. You will be given content that you will identify as valid and invalid.\nThe conditions on which the content is valid and invalid is given below. You will use the list given and content given \nto then identify which content meets the critiera of invalid or valid and tag the content with the right marker.\n\n\nAll valid content, are content that is not invalid.\n\nReturn only the json object that is appropriate.\nFor eg. Just\nVALID\n{\n  status:VALID,\n  activity_id: \"{{ $json.activity_id }}\"\n}\nor INVALID\n{\n  status:INVALID,\n  activity_id: \"{{ $json.activity_id }}\"\n}\nFor eg. \nUser: \n\"\"\" \n#hiring Software Engineer Fresher\n\nApply here: https://lnkd.in/e4RwJfr7\n\nCompany Description BotCampusAI Learning Solutions Pvt Ltd is a forward-thinking EdTech company specializing in online education in Artificial Intelligence, Machine Learning, Data Science, and Cloud Computing. Our mission is to equip professionals with cutting-edge skills and practical knowledge. We offer a variety of interactive courses and hands-on training designed for both beginners and seasoned tech professionals. Committed to bridging theoretical concepts with real-world applications, we empower learners to thrive in the rapidly evolving tech industry. Role Description This is a full-time remote role for a Software Engineer Fresher. The Software Engineer Fresher will be responsible for assisting in the development and maintenance of software applications. Day-to-day tasks will include programming, back-end web development, debugging software issues, and collaborating with team members to design and implement new features. This role also involves participating in code reviews and contributing to software documentation. Qualifications Skills in Computer Science and Software DevelopmentKnowledge of Back-End Web DevelopmentProficiency in Programming and Object-Oriented Programming\n\"\"\"\n\n\nAgent: INVALID\n\nWhy: Because of 'Software Engineer Fresher' this content is invalid. We do not want Software Enigneer Fresher roles\n\n\nUser: \n\"\"\"\nWe're hashtag#hiring a new Lead Software Engineer - AI SaaS (Remote, India) in India. Apply today or share this post with your network.\n\"\"\"\n\nAgent: INVALID\nWhy: the text '(Remote, India) in India' suggest this role is only for India. We are looking for 100% remote roles\n\n\nUser: \n\"\"\"\n💼 We’re Hiring: Blockchain Full Stack Engineer (Web3 | Smart Contracts)\n 📍 Remote – UK Based | 12-Month Contract | Some Overlap with US Hours\n✅ Build & deploy Solidity/Rust smart contracts\n ✅ Develop Next.js, React & TypeScript frontends\n ✅ Create & manage REST APIs, Docker, Kubernetes, CI/CD\n ✅ Work with subgraphs/substreams for blockchain data\n💡 5+ yrs full-stack exp | 2+ yrs Web3/Smart Contracts\n Bonus: Chainlink, DeFi, GraphQL, Terraform, Open-Source\n📩 Apply Now: spolavarpu@primusglobal.com\nhashtag#Hiring hashtag#BlockchainEngineer hashtag#FullStackDeveloper hashtag#Web3 hashtag#SmartContracts hashtag#Solidity hashtag#Rust hashtag#React hashtag#NextJS hashtag#TypeScript hashtag#DeFi hashtag#Docker hashtag#Kubernetes hashtag#RemoteWork hashtag#UKJobs hashtag#PrimusGlobal\n\"\"\"\n\nAgent: INVALID\nWhy: The text '📍 Remote – UK Based' suggest this role is only available for UK. We want 100% remote roles\n\n\n\n\nUser: \n\"\"\"\nCareer Renew is recruiting for one of its clients a Senior Backend Engineer - Crypto - this is a fully remote role for US or EU based candidates (if they can overlap 6+ hours with EST). Salary range: 180-300K USD yearly.\n\"\"\"\nAgent: INVALID\nWhy: The text 'this is a fully remote role for US or EU based candidates' suggest this role is only available for US or EU. We want worlwide or 100% remote roles in the message\n\n\nInvalid Roles: \nFrontend Developer\nFrontend Engineer\nQA Test Engineer\nQA Engineer (Manual & Automation)\nSoftware Engineer Fresher\nSEO Intern\nFigma UI/UX Designer\nUI/UX Designer\nUI Designer\nBlockchain Full Stack Engineer\n\n\nInvalid Location:\nRemote (Indonesia)\nRemote (COUNTRY), where COUNTRY represents any country outisde of LATAM and Jamaica\nUK, Remote\n(Remote, India) in India\n📍 Remote – UK Based\nthis is a fully remote role for US or EU based candidates\nLocation - India.\nLocation - America\nLocation - United States\nLocation - Canada\nLocation: Work From Home only from India (Remote)\nAll roles are Remote (PAN India) \nLocation: Work From Home only from India (Remote)\nWe’re Hiring: (Remote, U.S. or Canada)\n\n\nValid Location: \n100% remote\nWorlwide \nLocation: Canada, US, 100% Remote Worldwide\nLATAM\nJamaica\nRemote\nLATAM | Remote\n\n\n\n\n",
+              "role": "system"
+            },
+            {
+              "content": "=text: {{ $json.text }}\nactivity_id: {{ $json.activity_id }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        224,
+        -528
+      ],
+      "id": "974c24b7-905f-42e3-968e-dc9d1e867e7b",
+      "name": "tag-jobs",
+      "credentials": {
+        "openAiApi": {
+          "id": "3Tip5lkXMkSjteWA",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apimaestro~linkedin-jobs-scraper-api/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n    \"date_posted\": \"day\",\n    \"experienceLevel\": \"mid_senior\",\n    \"keywords\": \"Full Stack Engineer\",\n    \"location\": \"91000011\",\n    \"page_number\": 1,\n    \"remote\": \"remote\",\n    \"sort\": \"recent\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        -912
+      ],
+      "id": "fd1eaf5d-095e-4e37-a0ea-d50bda7579d6",
+      "name": "linkedin-jobs",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "Nn9YdNzZEwkIhUnO",
+          "name": "apify-apikey"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "29f78281-7aad-8089-b5cb-cd072fc4d529",
+          "mode": "list",
+          "cachedResultName": "Valid Farms",
+          "cachedResultUrl": "https://www.notion.so/29f782817aad8089b5cbcd072fc4d529"
+        },
+        "title": "={{ $json.job_title }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "website|select",
+              "selectValue": "linkedin"
+            },
+            {
+              "key": "post_date|date",
+              "date": "={{ $json.posted_at }}"
+            },
+            {
+              "key": "post_url|url",
+              "ignoreIfEmpty": true,
+              "urlValue": "={{ $json.job_url }}"
+            },
+            {
+              "key": "applied|select",
+              "selectValue": "not-applied"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        288,
+        -912
+      ],
+      "id": "d80c69b0-efce-4e10-997a-247abb32a4cc",
+      "name": "save-valid-jobs1",
+      "credentials": {
+        "notionApi": {
+          "id": "YoZcBB57YTj8xBlI",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/apimaestro~linkedin-posts-search-scraper-no-cookies/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n    \"date_filter\": \"past-24h\",\n    \"keyword\": \"(\\\"Full Stack Engineer\\\" OR \\\"Software Engineer\\\" OR \\\"Backend Engineer\\\") \\\"remote\\\" -hybrid -NYC -LA -San -.NET -C#\",\n    \"limit\": 50,\n    \"sort_type\": \"date_posted\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        -528
+      ],
+      "id": "aa51aba6-b2dd-49c6-816f-14e1713e7d55",
+      "name": "linkedin-posts",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "Nn9YdNzZEwkIhUnO",
+          "name": "apify-apikey"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "612138de-971c-4d19-a52d-fca076e715da",
+              "leftValue": "={{ $json.location }}",
+              "rightValue": "Latin America",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        16,
+        -912
+      ],
+      "id": "276858e4-05c4-44de-90dc-fb4b5740a48f",
+      "name": "Filter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Fields",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "linkedin-posts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "linkedin-jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Fields": {
+      "main": [
+        [
+          {
+            "node": "Search Google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Google": {
+      "main": [
+        [
+          {
+            "node": "contains data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Results": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pagination": {
+      "main": [
+        [
+          {
+            "node": "Pagination Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pagination Check": {
+      "main": [
+        [
+          {
+            "node": "Search Google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Create Database row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "loop-over-jobs": {
+      "main": [
+        [
+          {
+            "node": "attach-status-attribute",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "tag-jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "contains data": {
+      "main": [
+        [
+          {
+            "node": "Extract Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "attach-status-attribute": {
+      "main": [
+        [
+          {
+            "node": "check-status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-status": {
+      "main": [
+        [
+          {
+            "node": "save-valid-jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "save-invalid-jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "wait": {
+      "main": [
+        [
+          {
+            "node": "loop-over-jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Database row": {
+      "main": [
+        [
+          {
+            "node": "Pagination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tag-jobs": {
+      "main": [
+        [
+          {
+            "node": "wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "linkedin-jobs": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "linkedin-posts": {
+      "main": [
+        [
+          {
+            "node": "loop-over-jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "save-valid-jobs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Jamaica",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "1afdcbaa-c801-4d01-9372-cc3cc635cf30",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ec280168bef63f31950033a36a533eea8ec085738a407f74db6c101bb8df0e8b"
+  },
+  "id": "VwJ8tiYNOScHTprj",
+  "tags": [
+    {
+      "createdAt": "2025-10-25T03:04:49.668Z",
+      "updatedAt": "2025-10-25T03:04:49.668Z",
+      "id": "d636xJvFvlbvuvSN",
+      "name": "youtube"
+    }
+  ]
+}
